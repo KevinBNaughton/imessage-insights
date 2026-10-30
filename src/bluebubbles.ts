@@ -109,11 +109,21 @@ export class BlueBubblesClient {
         return this.request("GET", "ping");
     }
 
-    /** All chats, most recently active first, each with its last message and participants. */
-    listChats(limit = 1000): Promise<BBChat[]> {
-        return this.request("POST", "chat/query", {
-            body: { with: ["lastMessage", "participants"], sort: "lastmessage", limit }
-        });
+    /**
+     * All chats, most recently active first, each with its last message and participants.
+     * BlueBubbles caps a page at 1000 and its "lastmessage" ordering is unreliable (a chat with a message
+     * from today can land thousands of rows down), so page through everything and sort here.
+     */
+    async listChats(pageSize = 1000): Promise<BBChat[]> {
+        const all: BBChat[] = [];
+        for (let offset = 0; ; offset += pageSize) {
+            const page = await this.request<BBChat[]>("POST", "chat/query", {
+                body: { with: ["lastMessage", "participants"], sort: "lastmessage", limit: pageSize, offset }
+            });
+            all.push(...page);
+            if (page.length < pageSize) break;
+        }
+        return all.sort((a, b) => (b.lastMessage?.dateCreated ?? 0) - (a.lastMessage?.dateCreated ?? 0));
     }
 
     /** Messages in one chat, newest first unless sort is "ASC". after/before are epoch ms. */
