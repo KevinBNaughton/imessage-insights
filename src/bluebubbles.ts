@@ -48,6 +48,27 @@ interface BBEnvelope<T> {
     error?: { type?: string; message?: string };
 }
 
+/**
+ * Builds the `where` clause for a text search, working around two BlueBubbles/macOS behaviors:
+ *
+ * - On Ventura+ with the Private API enabled, BlueBubbles reroutes any statement containing the
+ *   literal "message.text" to a Spotlight search through the helper, which can hang indefinitely.
+ *   Writing the column as message."text" is the same SQL but skips that reroute.
+ * - Newer macOS often leaves message.text NULL and stores the text only inside the attributedBody
+ *   blob. CAST(blob AS TEXT) stops at the blob's first NUL byte, so we byte-search it with instr()
+ *   instead. That match is case-sensitive, so a few common casings of the term are tried.
+ */
+export function buildTextSearchWhere(term: string): { statement: string; args: Record<string, string> } {
+    const casings = new Set([term, term.toLowerCase(), term.toUpperCase(), term.charAt(0).toUpperCase() + term.slice(1).toLowerCase()]);
+    const args: Record<string, string> = { like: `%${term}%` };
+    const clauses = ['message."text" LIKE :like'];
+    [...casings].forEach((casing, i) => {
+        args[`blob${i}`] = casing;
+        clauses.push(`instr(message.attributedBody, CAST(:blob${i} AS BLOB)) > 0`);
+    });
+    return { statement: `(${clauses.join(" OR ")})`, args };
+}
+
 export class BlueBubblesClient {
     private readonly baseUrl: string;
     private readonly password: string;
@@ -102,11 +123,11 @@ export class BlueBubblesClient {
         });
     }
 
-    /** Text search across messages. Uses a LIKE match on message text. */
+    /** Text search across messages, newest first. See buildTextSearchWhere for why the query looks the way it does. */
     searchMessages(opts: { term: string; chatGuid?: string; after?: number; before?: number; limit?: number }): Promise<BBMessage[]> {
         return this.request("POST", "message/query", {
             body: {
-                where: [{ statement: "message.text LIKE :term", args: { term: `%${opts.term}%` } }],
+                where: [buildTextSearchWhere(opts.term)],
                 chatGuid: opts.chatGuid,
                 after: opts.after,
                 before: opts.before,

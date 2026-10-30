@@ -91,7 +91,7 @@ function mentionsMe(text: string, myNames: string[]): boolean {
     return myNames.some(name => new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text));
 }
 
-function chatTitle(chat: BBChat, contacts: ContactBook): string {
+export function chatTitle(chat: BBChat, contacts: ContactBook): string {
     if (chat.displayName) return chat.displayName;
     const people = (chat.participants ?? []).map(p => contacts.label(p.address));
     if (people.length > 0) return people.join(", ");

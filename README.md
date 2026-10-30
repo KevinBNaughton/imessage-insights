@@ -32,6 +32,27 @@ npm run triage -- --include-hidden   # list hidden chats too, tagged [done]/[mut
 npm run triage -- undo 4        # restore (number from an --include-hidden listing)
 ```
 
+## MCP (use it from Claude)
+
+Tools: `get_inbox`, `find_conversations`, `read_conversation`, `search_messages`, plus `mark_done`,
+`snooze_conversation`, `mute_conversation`, `unhide_conversation` (these only change this service's list).
+
+**Local, over stdio** (Claude Desktop / Claude Code on this Mac). It reads `.env` from the repo, so no env needed:
+
+```sh
+claude mcp add imessage --scope user -- "$(node -p process.execPath)" "$PWD/src/mcp-stdio.ts"
+```
+
+Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`); use the real
+`node` binary (`node -p process.execPath`), not a version-manager shim, since Desktop doesn't load your shell setup:
+
+```json
+{ "mcpServers": { "imessage": { "command": "/absolute/path/to/node", "args": ["/absolute/path/to/imessage-insights/src/mcp-stdio.ts"] } } }
+```
+
+**Over HTTP**: `npm start` also serves Streamable HTTP MCP at `POST /mcp`, behind the same bearer token.
+This is what a remote Claude custom connector (phone) will point at once it's tunneled.
+
 ## API
 
 All `/v1` routes need `Authorization: Bearer $INSIGHTS_TOKEN`.

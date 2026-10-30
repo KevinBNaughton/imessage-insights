@@ -2,7 +2,7 @@ import type { BlueBubblesClient, BBChat } from "./bluebubbles.ts";
 import type { TriageOptions } from "./config.ts";
 import { ContactBook, normalizeAddress } from "./contacts.ts";
 import { isHidden, type StateStore } from "./store.ts";
-import { buildReport, type ChatTriage, isConversational, type TriageReport, triageChat } from "./triage.ts";
+import { buildReport, type ChatTriage, chatTitle, isConversational, type TriageReport, triageChat } from "./triage.ts";
 
 const HOUR = 60 * 60 * 1000;
 const CONTACTS_TTL = 6 * HOUR;
@@ -58,6 +58,25 @@ export class InsightsService {
         const visible = opts.includeHidden ? flagged : flagged.filter(t => !isHidden(state.get(t.chatGuid), t.lastMessageGuid));
 
         return { ...buildReport(visible), hiddenCount: flagged.length - visible.length };
+    }
+
+    /** Chats whose title or participants match `name` (case-insensitive), most recent first. */
+    async findChats(name: string, limit = 10) {
+        const [chats, contacts] = await Promise.all([this.bb.listChats(), this.contacts()]);
+        const needle = name.trim().toLowerCase();
+        return chats
+            .filter(c => {
+                const haystack = [chatTitle(c, contacts), c.chatIdentifier, ...(c.participants ?? []).map(p => p.address)];
+                return haystack.some(h => h.toLowerCase().includes(needle));
+            })
+            .slice(0, limit)
+            .map(c => ({
+                chatGuid: c.guid,
+                title: chatTitle(c, contacts),
+                isGroup: c.style === 43,
+                lastMessageAt: c.lastMessage?.dateCreated ? new Date(c.lastMessage.dateCreated).toISOString() : null,
+                lastMessage: c.lastMessage?.text?.replace(/￼/g, "").trim().slice(0, 140) ?? null
+            }));
     }
 
     /** GUID of the newest conversational message, used to tie "done" to a point in the chat. */

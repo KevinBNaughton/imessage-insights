@@ -2,6 +2,8 @@ import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { BlueBubblesClient } from "./bluebubbles.ts";
 import { loadBlueBubblesConfig, loadServerConfig, loadTriageOptions } from "./config.ts";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createMcpServer } from "./mcp.ts";
 import { InsightsService } from "./service.ts";
 import { StateStore } from "./store.ts";
 
@@ -107,7 +109,28 @@ const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
 
     if (url.pathname === "/health") return send(res, 200, { ok: true });
+    // Clients probe these for OAuth discovery; a 404 tells them this server uses a static token instead.
+    if (url.pathname.startsWith("/.well-known/")) return send(res, 404, { error: "Not found" });
     if (!authorized(req)) return send(res, 401, { error: "Unauthorized" });
+
+    if (url.pathname === "/mcp") {
+        if (req.method !== "POST") return send(res, 405, { error: "Method not allowed" });
+        try {
+            // Stateless: a fresh server and transport per request, so nothing needs to survive between calls.
+            const mcp = createMcpServer(service, store);
+            const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+            res.on("close", () => {
+                transport.close();
+                mcp.close();
+            });
+            await mcp.connect(transport);
+            await transport.handleRequest(req, res, await readJson(req));
+        } catch (err) {
+            console.error(err);
+            if (!res.headersSent) send(res, err instanceof HttpError ? err.status : 500, { error: (err as Error).message });
+        }
+        return;
+    }
 
     try {
         send(res, 200, await route(req, url));
