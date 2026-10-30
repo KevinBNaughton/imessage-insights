@@ -1,0 +1,21 @@
+{
+  "name": "imessage-insights",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read-only triage API over a BlueBubbles server: who you owe a reply, who owes you one.",
+  "type": "module",
+  "engines": {
+    "node": ">=23.6"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.ts",
+    "dev": "node --env-file-if-exists=.env --watch src/server.ts",
+    "triage": "node --env-file-if-exists=.env src/cli.ts",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0"
+  }
+}
