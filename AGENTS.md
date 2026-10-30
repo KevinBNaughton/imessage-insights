@@ -35,6 +35,7 @@ Imports use explicit `.ts` extensions. SQLite comes from built-in `node:sqlite`.
 - `src/store.ts`: local done/snooze/mute state
 - `src/mcp.ts`: MCP tools; `src/mcp-stdio.ts` (local stdio), `/mcp` in `src/server.ts` (HTTP)
 - `src/cli.ts`: numbered terminal report and done/mute/snooze/undo commands
+- `scripts/launch-agent.sh`: LaunchAgent that keeps `npm start` running for the Cloudflare-tunneled connector
 
 ## BlueBubbles quirks (learned from real data)
 

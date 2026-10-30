@@ -114,7 +114,48 @@ If you later remove that Node version (e.g. `fnm uninstall`), update `command` w
 ### Over HTTP
 
 `npm start` also serves Streamable HTTP MCP at `POST /mcp`, behind the same bearer token.
-This is what a remote Claude custom connector (phone) will point at once it's tunneled.
+
+### claude.ai on the web and phone (remote connector)
+
+claude.ai reaches remote MCP servers from Anthropic's servers, so it needs a public HTTPS URL. A
+Cloudflare Tunnel provides one without opening ports: Cloudflare terminates HTTPS and `cloudflared` on
+this Mac forwards to `http://localhost:8787`.
+
+1. **Keep the server running.** This installs a LaunchAgent that starts `npm start` at login and restarts
+   it if it exits (logs in `~/Library/Logs/imessage-insights.log`):
+
+   ```sh
+   scripts/launch-agent.sh install    # re-run after switching Node versions; `uninstall` removes it
+   ```
+
+2. **Create the tunnel** (needs a domain on Cloudflare). Install `cloudflared` (`brew install cloudflared`),
+   then in the Zero Trust dashboard go to Networks → Tunnels → Create a tunnel → Cloudflared. Run the
+   `sudo cloudflared service install <token>` command it shows, then add a public hostname:
+   - Subdomain/domain: e.g. `imessage.example.com`
+   - Path: `^/mcp$`, so only the MCP endpoint is exposed (not `/v1` or `/health`)
+   - Service: `HTTP`, `localhost:8787`
+
+   Make sure no Access application (e.g. a wildcard one) covers this hostname, or it will block Claude.
+   Optionally add a WAF rule that blocks the hostname for source IPs outside `160.79.104.0/21`
+   (Anthropic's outbound range), so only Claude can reach it.
+
+3. **Check it** from any machine; expect `401` without the token and `200` with it:
+
+   ```sh
+   curl -s -o /dev/null -w "%{http_code}\n" -X POST https://imessage.example.com/mcp
+   ```
+
+4. **Add the connector** in claude.ai: Customize → Connectors → Add custom connector.
+   - URL: `https://imessage.example.com/mcp`
+   - Authentication: **No sign-in**
+   - Request headers: `authorization` = `Bearer <INSIGHTS_TOKEN>` (include `Bearer ` and the space).
+     `grep '^INSIGHTS_TOKEN=' .env | cut -d= -f2- | pbcopy` copies the token without printing it.
+
+   Request headers are in beta; if the dialog doesn't offer them, the server would need OAuth instead.
+   The connector then works in claude.ai, Claude Desktop and the mobile apps.
+
+The Mac must be awake with BlueBubbles running. Changing `INSIGHTS_TOKEN` means re-adding the connector,
+since its headers can't be edited.
 
 ## API
 
@@ -149,6 +190,6 @@ Don't expose the BlueBubbles port publicly: its single password allows sending a
 ## Roadmap
 
 - [ ] LLM pass (Claude API) over flagged threads: commitments ("I'll send it Friday"), one-line summaries, suggested actions
-- [ ] MCP server exposing the same tools
+- [x] MCP server exposing the same tools
 - [ ] BlueBubbles webhook receiver for incremental updates instead of a full scan per request
 - [ ] Daily digest
