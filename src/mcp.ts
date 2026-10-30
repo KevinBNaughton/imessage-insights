@@ -34,7 +34,15 @@ function compact(t: ChatTriage) {
 
 export function createMcpServer(service: InsightsService, store: StateStore): McpServer {
     const server = new McpServer(
-        { name: "imessage-insights", version: "0.1.0" },
+        {
+            name: "imessage-insights",
+            title: "iMessage Insights",
+            version: "0.1.0",
+            description:
+                "Read-only iMessage/SMS triage: see who you owe a reply, read conversations and search messages. " +
+                "Cannot send messages.",
+            websiteUrl: "https://github.com/KevinBNaughton/imessage-insights"
+        },
         {
             instructions:
                 "Read-only access to the user's iMessages and SMS via their Mac. Start with get_inbox to see who is waiting on " +
