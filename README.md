@@ -78,12 +78,38 @@ To remove it: `claude mcp remove imessage -s user`
 
 ### Claude Desktop
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (create it if missing), then
-restart Claude Desktop. Again use the real `node` binary, since Desktop doesn't load your shell setup:
+Claude Desktop must run on the same Mac as BlueBubbles and this repo, since it launches the stdio server
+locally. For another machine or your phone, see [Over HTTP](#over-http).
 
-```json
-{ "mcpServers": { "imessage": { "command": "/absolute/path/to/node", "args": ["/absolute/path/to/imessage-insights/src/mcp-stdio.ts"] } } }
-```
+1. Install Claude Desktop and open it once, so it creates `~/Library/Application Support/Claude/`.
+2. Get the absolute paths to fill in. Desktop doesn't load your shell setup, so use the real `node`
+   binary, not a version-manager shim:
+
+   ```sh
+   node -p process.execPath   # node path
+   echo "$PWD/src/mcp-stdio.ts"  # server path, run from the repo root
+   ```
+
+3. Add the server to `~/Library/Application Support/Claude/claude_desktop_config.json` (create it if
+   missing; if it already has `mcpServers`, add `imessage` alongside the others):
+
+   ```json
+   {
+     "mcpServers": {
+       "imessage": {
+         "command": "/absolute/path/to/node",
+         "args": ["/absolute/path/to/imessage-insights/src/mcp-stdio.ts"]
+       }
+     }
+   }
+   ```
+
+   No env vars are needed; the server reads `.env` from the repo.
+4. Quit Claude Desktop fully (Cmd+Q) and reopen it. The `imessage` tools should appear in the
+   tools/connectors menu.
+
+If you later remove that Node version (e.g. `fnm uninstall`), update `command` with the new
+`node -p process.execPath`.
 
 ### Over HTTP
 
