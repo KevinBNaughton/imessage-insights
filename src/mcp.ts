@@ -2,12 +2,17 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { InsightsService } from "./service.ts";
 import type { StateStore } from "./store.ts";
+import { parseWhen } from "./time.ts";
 import type { ChatTriage } from "./triage.ts";
 
 // MCP tools over the triage service. Read tools never change anything; the done/snooze/mute
 // tools only change this service's own list, never Messages itself.
 
 const READ = { readOnlyHint: true, openWorldHint: false } as const;
+
+const WHEN =
+    "ISO 8601 date or time. A bare date (2026-10-09) is local midnight at the start of that day; times without an " +
+    "offset are local (e.g. 2026-10-09T20:30).";
 const LOCAL_WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 
 function json(data: unknown) {
@@ -83,31 +88,61 @@ export function createMcpServer(service: InsightsService, store: StateStore): Mc
         "read_conversation",
         {
             title: "Read a conversation",
-            description: "Returns the most recent messages in a chat, oldest first.",
+            description:
+                "Returns messages in a chat, oldest first, with local timestamps. With no time options, returns the latest " +
+                "messages. Use `after`/`before` to read a specific stretch, or `around` to see context on both sides of a " +
+                "moment (e.g. a search_messages hit's `at`). Tapbacks/reactions are hidden unless include_reactions is true. " +
+                "If `truncated` is true there is more: page forward with `after` = `nextAfter`, or backward with " +
+                "`before` = `nextBefore`.",
             inputSchema: {
-                chat_id: z.string().describe("chat_id from get_inbox or find_conversations"),
-                limit: z.number().int().min(1).max(200).optional().describe("Number of messages. Default 40.")
+                chat_id: z.string().describe("chat_id from get_inbox, find_conversations or search_messages"),
+                limit: z.number().int().min(1).max(200).optional().describe("Max messages. Default 40."),
+                after: z.string().optional().describe(WHEN + " Only `after`: reads forward from this point."),
+                before: z.string().optional().describe(WHEN + " Returns the latest messages before this point."),
+                around: z.string().optional().describe(WHEN + " Returns ~limit/2 messages on each side. Ignores after/before."),
+                include_reactions: z.boolean().optional().describe("Include tapbacks and system events. Default false.")
             },
             annotations: READ
         },
-        async ({ chat_id, limit }) => json(await service.conversation(chat_id, limit ?? 40))
+        async ({ chat_id, limit, after, before, around, include_reactions }) =>
+            json(
+                await service.conversation(chat_id, {
+                    limit: limit ?? 40,
+                    includeReactions: include_reactions,
+                    after: after ? parseWhen(after) : undefined,
+                    before: before ? parseWhen(before) : undefined,
+                    around: around ? parseWhen(around) : undefined
+                })
+            )
     );
 
     server.registerTool(
         "search_messages",
         {
             title: "Search messages",
-            description: "Searches message text across all chats (or one chat), newest first. Matches substrings, not meaning.",
+            description:
+                "Searches message text across all chats (or one chat), newest first. Matches substrings, not meaning. " +
+                "To see a hit in context, call read_conversation with its chatGuid and `around` = its `at`.",
             inputSchema: {
                 query: z.string().min(2),
                 chat_id: z.string().optional(),
-                lookback_days: z.number().int().min(1).max(3650).optional(),
+                after: z.string().optional().describe(WHEN),
+                before: z.string().optional().describe(WHEN),
+                lookback_days: z.number().int().min(1).max(3650).optional().describe("Shortcut for `after`; ignored if `after` is set."),
                 limit: z.number().int().min(1).max(100).optional().describe("Default 25.")
             },
             annotations: READ
         },
-        async ({ query, chat_id, lookback_days, limit }) =>
-            json(await service.search(query, { chatGuid: chat_id, lookbackDays: lookback_days, limit: limit ?? 25 }))
+        async ({ query, chat_id, after, before, lookback_days, limit }) =>
+            json(
+                await service.search(query, {
+                    chatGuid: chat_id,
+                    after: after ? parseWhen(after) : undefined,
+                    before: before ? parseWhen(before) : undefined,
+                    lookbackDays: lookback_days,
+                    limit: limit ?? 25
+                })
+            )
     );
 
     server.registerTool(

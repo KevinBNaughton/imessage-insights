@@ -37,20 +37,57 @@ npm run triage -- undo 4        # restore (number from an --include-hidden listi
 Tools: `get_inbox`, `find_conversations`, `read_conversation`, `search_messages`, plus `mark_done`,
 `snooze_conversation`, `mute_conversation`, `unhide_conversation` (these only change this service's list).
 
-**Local, over stdio** (Claude Desktop / Claude Code on this Mac). It reads `.env` from the repo, so no env needed:
+`read_conversation` and `search_messages` take `after`/`before` (ISO 8601; bare dates and offset-less
+times are local), and `read_conversation` also takes `around` to show context on both sides of a moment,
+such as a search hit. Timestamps come back in local time. Tapbacks are hidden unless `include_reactions`
+is set; page with the returned `nextAfter`/`nextBefore`.
+
+BlueBubbles must be running; otherwise the tools return an error instead of results.
+
+### Claude Code
+
+The stdio server reads `.env` from the repo, so it needs no env vars. Register it once for all projects:
 
 ```sh
 claude mcp add imessage --scope user -- "$(node -p process.execPath)" "$PWD/src/mcp-stdio.ts"
+claude mcp get imessage     # should show "✔ Connected"
 ```
 
-Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`); use the real
-`node` binary (`node -p process.execPath`), not a version-manager shim, since Desktop doesn't load your shell setup:
+Use the real `node` binary (`node -p process.execPath`), not a version-manager shim such as an
+fnm/nvm path that changes per shell.
+
+MCP servers load only when a session starts, so after adding it:
+
+1. `/exit` the current session
+2. restart with `claude --continue` (same conversation) or `claude` (fresh)
+3. run `/mcp` and check that `imessage` is listed with 8 tools
+
+Then just ask:
+
+- "Who am I behind on texting?"
+- "What did Subin and I last talk about?"
+- "Search my texts for the Tahoe trip plans"
+- "What did Katherine and I talk about the night of Oct 9?"
+- "Find where I said 'figure out later' and show me what led up to it"
+- "Mute the SkyMiles chat"
+
+Claude Code asks permission the first time each tool runs. Choose "don't ask again", or add
+`mcp__imessage` to `permissions.allow` in your settings to skip the prompts.
+
+To remove it: `claude mcp remove imessage -s user`
+
+### Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (create it if missing), then
+restart Claude Desktop. Again use the real `node` binary, since Desktop doesn't load your shell setup:
 
 ```json
 { "mcpServers": { "imessage": { "command": "/absolute/path/to/node", "args": ["/absolute/path/to/imessage-insights/src/mcp-stdio.ts"] } } }
 ```
 
-**Over HTTP**: `npm start` also serves Streamable HTTP MCP at `POST /mcp`, behind the same bearer token.
+### Over HTTP
+
+`npm start` also serves Streamable HTTP MCP at `POST /mcp`, behind the same bearer token.
 This is what a remote Claude custom connector (phone) will point at once it's tunneled.
 
 ## API
@@ -61,8 +98,8 @@ All `/v1` routes need `Authorization: Bearer $INSIGHTS_TOKEN`.
 |---|---|---|
 | GET | `/health` | Liveness check, no auth |
 | GET | `/v1/triage?lookbackDays=14&includeHidden=false` | `needsReply`, `waitingOnThem`, `unknownSender`, each longest-waiting first, with the last few messages for context |
-| GET | `/v1/chats/:chatGuid/messages?limit=50` | Conversation, oldest first |
-| GET | `/v1/search?q=dinner&lookbackDays=30&chatGuid=` | Text search across messages |
+| GET | `/v1/chats/:chatGuid/messages?limit=50&after=&before=&around=&includeReactions=` | Conversation, oldest first, optionally a time window |
+| GET | `/v1/search?q=dinner&after=&before=&lookbackDays=30&chatGuid=` | Text search across messages |
 | POST | `/v1/chats/:chatGuid/done` | Hide until a new message arrives in the chat |
 | POST | `/v1/chats/:chatGuid/snooze` `{"hours": 24}` or `{"until": "2026-10-20T09:00:00Z"}` | Hide until then |
 | POST | `/v1/chats/:chatGuid/mute` | Always hide |

@@ -116,10 +116,10 @@ export class BlueBubblesClient {
         });
     }
 
-    /** Messages in one chat, newest first. */
-    chatMessages(chatGuid: string, opts: { limit?: number; after?: number; before?: number } = {}): Promise<BBMessage[]> {
+    /** Messages in one chat, newest first unless sort is "ASC". after/before are epoch ms. */
+    chatMessages(chatGuid: string, opts: { limit?: number; after?: number; before?: number; sort?: "ASC" | "DESC" } = {}): Promise<BBMessage[]> {
         return this.request("GET", `chat/${encodeURIComponent(chatGuid)}/message`, {
-            query: { limit: opts.limit ?? 50, after: opts.after, before: opts.before, sort: "DESC", with: "handle" }
+            query: { limit: opts.limit ?? 50, after: opts.after, before: opts.before, sort: opts.sort ?? "DESC", with: "handle" }
         });
     }
 

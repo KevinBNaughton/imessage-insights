@@ -6,6 +6,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { createMcpServer } from "./mcp.ts";
 import { InsightsService } from "./service.ts";
 import { StateStore } from "./store.ts";
+import { parseWhen } from "./time.ts";
 
 const serverConfig = loadServerConfig();
 const store = new StateStore(serverConfig.dbPath);
@@ -48,6 +49,16 @@ function intParam(url: URL, name: string): number | undefined {
     return n;
 }
 
+function timeParam(url: URL, name: string): number | undefined {
+    const raw = url.searchParams.get(name);
+    if (raw == null || raw.trim() === "") return undefined;
+    try {
+        return parseWhen(raw);
+    } catch (err) {
+        throw new HttpError(400, `${name}: ${(err as Error).message}`);
+    }
+}
+
 function send(res: ServerResponse, status: number, body: unknown) {
     res.writeHead(status, { "Content-Type": "application/json" });
     res.end(JSON.stringify(body));
@@ -69,6 +80,8 @@ async function route(req: IncomingMessage, url: URL): Promise<unknown> {
         if (!q) throw new HttpError(400, "q is required");
         return service.search(q, {
             chatGuid: url.searchParams.get("chatGuid") ?? undefined,
+            after: timeParam(url, "after"),
+            before: timeParam(url, "before"),
             lookbackDays: intParam(url, "lookbackDays"),
             limit: intParam(url, "limit")
         });
@@ -80,7 +93,13 @@ async function route(req: IncomingMessage, url: URL): Promise<unknown> {
         const action = chatMatch[2];
 
         if (method === "GET" && action === "messages") {
-            return service.conversation(chatGuid, Math.min(intParam(url, "limit") ?? 50, 500));
+            return service.conversation(chatGuid, {
+                limit: Math.min(intParam(url, "limit") ?? 50, 500),
+                after: timeParam(url, "after"),
+                before: timeParam(url, "before"),
+                around: timeParam(url, "around"),
+                includeReactions: url.searchParams.get("includeReactions") === "true"
+            });
         }
         if (method === "POST" && action === "done") {
             const body = await readJson(req);
